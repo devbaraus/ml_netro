@@ -12,16 +12,21 @@ augment=5
 
 # python3 /src/tcc_netro/main.py -c 40 -s 3 -o 0 -a 5 -b spotify_20
 
-for l in ${!bases[@]}; do
-    for k in ${!segment[@]}; do
-        for i in ${!overlap[@]}; do
-            for j in ${!coeff[@]}; do
-                CUDA_VISIBLE_DEVICES=1 python3 /src/tcc_netro/main2.py -c ${coeff[$j]} -s ${segment[$k]} -o ${overlap[$i]} -a $augment -b ${bases[$l]}
-            done
-        done
-    done
-done
+# for l in ${!bases[@]}; do
+#     for k in ${!segment[@]}; do
+#         for i in ${!overlap[@]}; do
+#             for j in ${!coeff[@]}; do
+#                 CUDA_VISIBLE_DEVICES=1 python3 /src/tcc_netro/main2.py -c ${coeff[$j]} -s ${segment[$k]} -o ${overlap[$i]} -a $augment -b ${bases[$l]}
+#             done
+#         done
+#     done
+# done
 
+
+for file in /src/tcc_netro/dataset/inference_20/wxyz/*.mp3; do
+    echo $file
+    python3 /src/tcc_netro/inference.py -m /src/tcc_netro/models/spotify_20/SEG_3_OVERLAP_0_AUG_5/MFCC_40/D320_DO0.3_D310_DO0_D0/1651153827_96.76056504249573 -i "$file"
+done
 
 # python3 /src/tcc/inference.py -m /src/tcc/models/base_portuguese_20/SEG_1_OVERLAP_0_AUG_30/MFCC_18/D60_DO0_D0_DO0_D0/1649338837_86.86131238937378
 

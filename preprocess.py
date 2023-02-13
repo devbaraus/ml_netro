@@ -10,6 +10,8 @@ import librosa
 from praudio import utils
 import noisereduce as nr
 from random import random
+from decorators import timing
+import tensorflow as tf
 
 from joblib import Parallel, delayed
 
@@ -204,6 +206,7 @@ def segment_signal(signal: list, sample_rate: int, segment_length: int, overlap_
     return np.array(segments)
 
 
+@timing
 def segment_dataset(input_dir: str,
                     output_dir: str,
                     base_trans: list = [],
@@ -212,7 +215,8 @@ def segment_dataset(input_dir: str,
                     overlap_size: float = 0.0,
                     segment_length: int = 1,
                     plot_distribution: bool = False,
-                    aug_per_segment: bool = False,
+                    base_per_segment: bool = False,
+                    extra_per_segment:  bool = False,
                     reduce_noise: float = 0.0):
 
     df = pd.read_csv(f'{input_dir}/metadata.csv')
@@ -225,7 +229,6 @@ def segment_dataset(input_dir: str,
         "album": [],
         "title": [],
         "genre": [],
-        "thumbnail": [],
         "filename": [],
         "aug_filename": [],
         "transformations": [],
@@ -240,7 +243,6 @@ def segment_dataset(input_dir: str,
             "album": [],
             "title": [],
             "genre": [],
-            "thumbnail": [],
             "filename": [],
             "aug_filename": [],
             "transformations": [],
@@ -257,7 +259,7 @@ def segment_dataset(input_dir: str,
         transformations_name = '-'.join([
             trans.__class__.__name__ for trans in base_trans])
 
-        if aug_per_segment:
+        if base_per_segment:
             segments = segment_signal(signal,
                                       sample_rate,
                                       segment_length=segment_length,
@@ -294,7 +296,6 @@ def segment_dataset(input_dir: str,
             data['album'].append(row['album'])
             data['title'].append(row['title'])
             data['genre'].append(row['genre'])
-            data['thumbnail'].append(row['thumbnail'])
             data['filename'].append(row['filename'])
             data['aug_filename'].append(seg_filename)
 
@@ -315,39 +316,64 @@ def segment_dataset(input_dir: str,
 
         augmented_signal = augment_signal(signal, augment_size=augment_size)
 
-        transformed_signals = transform_samples(augmented_signal,
+        if extra_per_segment:
+            segments = np.array([segment_signal(si,
                                                 sample_rate,
-                                                transformations)
+                                                segment_length=segment_length,
+                                                overlap_size=overlap_size,
+                                                plot=False) for si in augmented_signal])
 
-        for indexI, transformed_signal in enumerate(transformed_signals):
+            segments = transform_samples(segments,
+                                         sample_rate,
+                                         base_trans,
+                                         reduce_noise,
+                                         row['filename'])
 
-            segments = segment_signal(transformed_signal,
-                                      sample_rate,
-                                      segment_length,
-                                      overlap_size,
-                                      plot=False)
+        else:
+            transformed_signals = transform_samples(augmented_signal,
+                                                    sample_rate,
+                                                    transformations)
 
-            for indexJ, segment in enumerate(segments):
+            segments = np.array([segment_signal(si,
+                                                sample_rate,
+                                                segment_length=segment_length,
+                                                overlap_size=overlap_size,
+                                                plot=False) for si in transformed_signals])
 
-                data['label'].append(row['label'])
-                data['sample_rate'].append(row['sample_rate'])
-                data['length'].append(segment.size/sample_rate)
+        # transformed_signals = transform_samples(augmented_signal,
+        #                                         sample_rate,
+        #                                         transformations)
 
-                aug_filename = f'{src_filename}_{indexI}_{indexJ}.wav'
+        # for indexI, transformed_signal in enumerate(transformed_signals):
 
-                data['artists'].append(row['artists'])
-                data['album'].append(row['album'])
-                data['title'].append(row['title'])
-                data['genre'].append(row['genre'])
-                data['thumbnail'].append(row['thumbnail'])
-                data['filename'].append(row['filename'])
-                data['aug_filename'].append(aug_filename)
+            # segments = segment_signal(transformed_signal,
+            #                           sample_rate,
+            #                           segment_length,
+            #                           overlap_size,
+            #                           plot=False)
 
-                sio.wavfile.write(f'{output_dir}/audio/{aug_filename}',
-                                  sample_rate,
-                                  segment)
+        segments = segments.reshape(np.prod(segments.shape[:-1]), -1)
 
-                data['transformations'].append(transformations_name)
+        for indexJ, segment in enumerate(segments):
+
+            data['label'].append(row['label'])
+            data['sample_rate'].append(row['sample_rate'])
+            data['length'].append(segment.size/sample_rate)
+
+            aug_filename = f'{src_filename}_{indexI}_{indexJ}.wav'
+
+            data['artists'].append(row['artists'])
+            data['album'].append(row['album'])
+            data['title'].append(row['title'])
+            data['genre'].append(row['genre'])
+            data['filename'].append(row['filename'])
+            data['aug_filename'].append(aug_filename)
+
+            sio.wavfile.write(f'{output_dir}/audio/{aug_filename}',
+                              sample_rate,
+                              segment)
+
+            data['transformations'].append(transformations_name)
 
         return data
 
@@ -370,6 +396,8 @@ def segment_dataset(input_dir: str,
                                            index=False)
 
 
+
+@timing
 def represent_dataset(input_dir, output_dir, **mfcc_params):
     df = pd.read_csv(f'{input_dir}/metadata.csv')
 
@@ -411,6 +439,7 @@ def represent_dataset(input_dir, output_dir, **mfcc_params):
     return mat_dict
 
 
+@timing
 def pipeline_signal(file_path: str = '', sample_rate: int = 24000, segment_length: int = 1, overlap_size: float = 0, transformations: list = [], **mfcc_params):
     signal, rate = librosa.load(file_path,
                                 sr=sample_rate,
@@ -466,4 +495,4 @@ if __name__ == '__main__':
                     overlap_size=0,
                     segment_length=3,
                     plot_distribution=True,
-                    aug_per_segment=True)
+                    base_per_segment=True)
